@@ -49,7 +49,9 @@ async def fetch_models(session, api_key: str, url: str) -> list[str]:
     else:
         base_url = url.rstrip("/")
     models_url = f"{base_url}/models"
-    headers = {"Authorization": f"Bearer {api_key}"}
+    headers = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
     try:
         async with session.get(models_url, headers=headers, timeout=10) as resp:
             if resp.status != 200:
@@ -73,7 +75,9 @@ async def fetch_voices(session, api_key: str, url: str) -> list[str]:
     else:
         base_url = url.rstrip("/")
     voices_url = f"{base_url}/audio/voices"
-    headers = {"Authorization": f"Bearer {api_key}"}
+    headers = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
     try:
         async with session.get(voices_url, headers=headers, timeout=10) as resp:
             if resp.status != 200:
@@ -165,7 +169,7 @@ class OpenAITTSConfigFlow(ConfigFlow, domain=DOMAIN):
                 voices = await fetch_voices(session, api_key, url)
                 # Present model/voice selection
                 schema = vol.Schema({
-                    vol.Required(CONF_API_KEY, default=api_key): str,
+                    vol.Optional(CONF_API_KEY, default=api_key or ""): str,
                     vol.Required(CONF_URL, default=url): str,
                     vol.Optional(CONF_SPEED, default=speed): selector({
                         "number": {
@@ -198,9 +202,10 @@ class OpenAITTSConfigFlow(ConfigFlow, domain=DOMAIN):
                     errors=errors,
                     description_placeholders=user_input
                 )
+
         # Step 1: Ask for API key and URL
         schema = vol.Schema({
-            vol.Required(CONF_API_KEY): str,
+            vol.Optional(CONF_API_KEY, default=""): str,
             vol.Required(CONF_URL, default="https://api.openai.com/v1/audio/speech"): str,
             vol.Optional(CONF_SPEED, default=1.0): selector({
                 "number": {
