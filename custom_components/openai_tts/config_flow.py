@@ -83,13 +83,15 @@ async def fetch_voices(session, api_key: str, url: str) -> list[str]:
             if resp.status != 200:
                 raise Exception(f"Failed to fetch voices: {resp.status}")
             data = await resp.json()
-            # Kokoro returns a list or {"data": ["voice1", ...]}
-            if isinstance(data, dict) and "data" in data:
-                return data["data"]
+            # Kokoro returns a list, {"data": [...]}, or {"voices": [...]}
+            if isinstance(data, dict):
+                if "data" in data:
+                    return data["data"]
+                elif "voices" in data:
+                    return data["voices"]
             elif isinstance(data, list):
                 return data
-            else:
-                raise Exception(f"Unexpected voices response: {data}")
+            raise Exception(f"Unexpected voices response: {data}")
     except Exception as e:
         _LOGGER.error(f"Could not fetch voices from {voices_url}: {e}")
         return VOICES  # fallback to static
