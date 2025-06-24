@@ -131,84 +131,87 @@ class OpenAITTSConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for OpenAI TTS."""
     VERSION = 1
 
+    def __init__(self):
+        self._data = {}
+
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
         """
-        Step 1: Ask for API key and endpoint.
-        Step 2: Fetch models and present model/voice selection.
+        Step 1: Ask for base URL and API key (optional).
         """
         errors = {}
         if user_input is not None:
-            # Step 2: Model/voice selection
-            if CONF_MODEL in user_input and CONF_VOICE in user_input:
-                try:
-                    await validate_user_input(user_input)
-                    entry_id = generate_entry_id()
-                    user_input[UNIQUE_ID] = entry_id
-                    await self.async_set_unique_id(entry_id)
-                    hostname = urlparse(user_input[CONF_URL]).hostname
-                    return self.async_create_entry(
-                        title=f"OpenAI TTS ({hostname}, {user_input[CONF_MODEL]})",
-                        data=user_input
-                    )
-                except data_entry_flow.AbortFlow:
-                    return self.async_abort(reason="already_configured")
-                except HomeAssistantError as e:
-                    _LOGGER.exception(str(e))
-                    errors["base"] = str(e)
-                except ValueError as e:
-                    _LOGGER.exception(str(e))
-                    errors["base"] = str(e)
-                except Exception as e:
-                    _LOGGER.exception(str(e))
-                    errors["base"] = "unknown_error"
-            else:
-                # Step 1: API key and URL submitted, now fetch models
-                api_key = user_input.get(CONF_API_KEY)
-                url = user_input.get(CONF_URL, "https://api.openai.com/v1/audio/speech")
-                speed = user_input.get(CONF_SPEED, 1.0)
-                session = async_get_clientsession(self.hass)
-                models = await fetch_models(session, api_key, url)
-                voices = await fetch_voices(session, api_key, url)
-                # Present model/voice selection
-                schema = vol.Schema({
-                    vol.Optional(CONF_API_KEY, default=api_key or ""): str,
-                    vol.Required(CONF_URL, default=url): str,
-                    vol.Optional(CONF_SPEED, default=speed): selector({
-                        "number": {
-                            "min": 0.25,
-                            "max": 4.0,
-                            "step": 0.05,
-                            "mode": "slider"
-                        }
-                    }),
-                    vol.Required(CONF_MODEL): selector({
-                        "select": {
-                            "options": models,
-                            "mode": "dropdown",
-                            "sort": True,
-                            "custom_value": True
-                        }
-                    }),
-                    vol.Required(CONF_VOICE, default=voices[0] if voices else ""): selector({
-                        "select": {
-                            "options": voices,
-                            "mode": "dropdown",
-                            "sort": True,
-                            "custom_value": True
-                        }
-                    })
-                })
-                return self.async_show_form(
-                    step_id="user",
-                    data_schema=schema,
-                    errors=errors,
-                    description_placeholders=user_input
-                )
-
-        # Step 1: Ask for API key and URL
+            self._data[CONF_API_KEY] = user_input.get(CONF_API_KEY, "")
+            self._data[CONF_URL] = user_input[CONF_URL].rstrip("/")
+            return await self.async_step_model()
         schema = vol.Schema({
             vol.Optional(CONF_API_KEY, default=""): str,
-            vol.Required(CONF_URL, default="https://api.openai.com/v1/audio/speech"): str,
+            vol.Required(CONF_URL, default="http://localhost:8880"): str
+        })
+        return self.async_show_form(
+            step_id="user",
+            data_schema=schema,
+            errors=errors
+        )
+
+    async def async_step_model(self, user_input: dict[str, Any] | None = None):
+        """
+        Step 2: Fetch models and select model.
+        """
+        errors = {}
+        session = async_get_clientsession(self.hass)
+        base_url = self._data[CONF_URL]
+        api_key = self._data.get(CONF_API_KEY, "")
+        models = await fetch_models(session, api_key, f"{base_url}/v1/audio/speech")
+        if user_input is not None:
+            self._data[CONF_MODEL] = user_input[CONF_MODEL]
+            return await self.async_step_voice()
+        schema = vol.Schema({
+            vol.Required(CONF_MODEL): selector({
+                "select": {
+                    "options": models,
+                    "mode": "dropdown",
+                    "sort": True,
+                    "custom_value": True
+                }
+            })
+        })
+        return self.async_show_form(
+            step_id="model",
+            data_schema=schema,
+            errors=errors
+        )
+
+    async def async_step_voice(self, user_input: dict[str, Any] | None = None):
+        """
+        Step 3: Fetch voices and select voice (plus speed/other options).
+        """
+        errors = {}
+        session = async_get_clientsession(self.hass)
+        base_url = self._data[CONF_URL]
+        api_key = self._data.get(CONF_API_KEY, "")
+        voices = await fetch_voices(session, api_key, f"{base_url}/v1/audio/speech")
+        if user_input is not None:
+            self._data[CONF_VOICE] = user_input[CONF_VOICE]
+            self._data[CONF_SPEED] = user_input.get(CONF_SPEED, 1.0)
+            # Compose the full endpoint for speech generation
+            self._data[CONF_URL] = f"{base_url}/v1/audio/speech"
+            entry_id = generate_entry_id()
+            self._data[UNIQUE_ID] = entry_id
+            await self.async_set_unique_id(entry_id)
+            hostname = urlparse(self._data[CONF_URL]).hostname
+            return self.async_create_entry(
+                title=f"OpenAI TTS ({hostname}, {self._data[CONF_MODEL]})",
+                data=self._data
+            )
+        schema = vol.Schema({
+            vol.Required(CONF_VOICE, default=voices[0] if voices else ""): selector({
+                "select": {
+                    "options": voices,
+                    "mode": "dropdown",
+                    "sort": True,
+                    "custom_value": True
+                }
+            }),
             vol.Optional(CONF_SPEED, default=1.0): selector({
                 "number": {
                     "min": 0.25,
@@ -219,10 +222,9 @@ class OpenAITTSConfigFlow(ConfigFlow, domain=DOMAIN):
             })
         })
         return self.async_show_form(
-            step_id="user",
+            step_id="voice",
             data_schema=schema,
-            errors=errors,
-            description_placeholders=user_input
+            errors=errors
         )
 
     @staticmethod
