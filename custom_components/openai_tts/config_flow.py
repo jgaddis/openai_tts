@@ -301,10 +301,8 @@ class OpenAITTSOptionsFlow(OptionsFlow):
                 except Exception as e:
                     _LOGGER.error(f"Failed to delete {file_path}: {e}")
 
-    def _get_options_schema(self):
-        # Retrieve chime options using the executor to avoid blocking the event loop.
-        import asyncio
-        chime_options = asyncio.run(self.hass.async_add_executor_job(get_chime_options))
+    async def _get_options_schema(self):
+        """Build the options schema dynamically."""
         # Fetch dynamic models and voices from the server
         api_key = self.config_entry.data.get(CONF_API_KEY, "")
         url = self.config_entry.data.get(CONF_URL, "http://localhost:8880/v1/audio/speech")
@@ -314,8 +312,9 @@ class OpenAITTSOptionsFlow(OptionsFlow):
         else:
             base_url = url.rstrip("/")
         session = async_get_clientsession(self.hass)
-        models = asyncio.run(fetch_models(session, api_key, f"{base_url}/v1/audio/speech"))
-        voices = asyncio.run(fetch_voices(session, api_key, f"{base_url}/v1/audio/speech"))
+        models = await fetch_models(session, api_key, f"{base_url}/v1/audio/speech")
+        voices = await fetch_voices(session, api_key, f"{base_url}/v1/audio/speech")
+        chime_options = await self.hass.async_add_executor_job(get_chime_options)
         current_voice = self.config_entry.options.get(CONF_VOICE, self.config_entry.data.get(CONF_VOICE, ""))
         if current_voice not in voices and voices:
             current_voice = voices[0]
