@@ -377,11 +377,13 @@ class OpenAITTSOptionsFlow(OptionsFlow):
             }),
 
             vol.Optional(
-                 CONF_INSTRUCTIONS,
-                 default=current_instructions
-            ): TextSelector(
-                TextSelectorConfig(type=TextSelectorType.TEXT,multiline=True)
-            ),
+                CONF_INSTRUCTIONS,
+                default=current_instructions
+            ): selector({
+                "text": {
+                    "multiline": True
+                }
+            }),
 
             vol.Optional(
                 CONF_NORMALIZE_AUDIO,
