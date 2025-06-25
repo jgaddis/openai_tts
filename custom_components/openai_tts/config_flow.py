@@ -315,11 +315,85 @@ class OpenAITTSOptionsFlow(OptionsFlow):
         models = await fetch_models(session, api_key, f"{base_url}/v1/audio/speech")
         voices = await fetch_voices(session, api_key, f"{base_url}/v1/audio/speech")
         chime_options = await self.hass.async_add_executor_job(get_chime_options)
+        # Defensive: ensure all lists are non-empty lists of strings
+        if not isinstance(chime_options, list) or not chime_options:
+            chime_options = ["threetone.mp3"]
+        if not isinstance(models, list) or not models:
+            models = ["tts-1"]
+        if not isinstance(voices, list) or not voices:
+            voices = ["alloy"]
         current_voice = self.config_entry.options.get(CONF_VOICE, self.config_entry.data.get(CONF_VOICE, ""))
         if current_voice not in voices and voices:
             current_voice = voices[0]
         current_instructions = self.config_entry.options.get(CONF_INSTRUCTIONS, self.config_entry.data.get(CONF_INSTRUCTIONS, "")) or ""
-        return vol.Schema({
+        schema_dict = {
+            vol.Optional(
+                CONF_CACHE_ENABLED,
+                default=self.config_entry.options.get(CONF_CACHE_ENABLED, self.config_entry.data.get(CONF_CACHE_ENABLED, True))
+            ): selector({"boolean": {}}),
+            vol.Optional(
+                CONF_CHIME_ENABLE,
+                default=self.config_entry.options.get(CONF_CHIME_ENABLE, self.config_entry.data.get(CONF_CHIME_ENABLE, False))
+            ): selector({"boolean": {}}),
+            vol.Optional(
+                CONF_CHIME_SOUND,
+                default=self.config_entry.options.get(CONF_CHIME_SOUND, self.config_entry.data.get(CONF_CHIME_SOUND, "threetone.mp3"))
+            ): selector({
+                "select": {
+                    "options": chime_options
+                }
+            }),
+            vol.Optional(
+                CONF_MODEL,
+                default=self.config_entry.options.get(CONF_MODEL, self.config_entry.data.get(CONF_MODEL, models[0] if models else ""))
+            ): selector({
+                "select": {
+                    "options": models,
+                    "mode": "dropdown",
+                    "sort": True,
+                    "custom_value": True
+                }
+            }),
+            vol.Optional(
+                CONF_SPEED,
+                default=self.config_entry.options.get(CONF_SPEED, self.config_entry.data.get(CONF_SPEED, 1.0))
+            ): selector({
+                "number": {
+                    "min": 0.25,
+                    "max": 4.0,
+                    "step": 0.05,
+                    "mode": "slider"
+                }
+            }),
+            vol.Optional(
+                CONF_VOICE,
+                default=current_voice
+            ): selector({
+                "select": {
+                    "options": voices,
+                    "mode": "dropdown",
+                    "sort": True,
+                    "custom_value": True
+                }
+            }),
+            vol.Optional(
+                CONF_INSTRUCTIONS,
+                default=current_instructions
+            ): selector({
+                "text": {
+                    "multiline": True
+                }
+            }),
+            vol.Optional(
+                CONF_NORMALIZE_AUDIO,
+                default=self.config_entry.options.get(CONF_NORMALIZE_AUDIO, self.config_entry.data.get(CONF_NORMALIZE_AUDIO, False))
+            ): selector({"boolean": {}})
+        }
+        import logging
+        _LOGGER = logging.getLogger(__name__)
+        _LOGGER.debug("OpenAI TTS options schema dict: %r", schema_dict)
+        return vol.Schema(schema_dict)
+
             vol.Optional(
                 CONF_CACHE_ENABLED,
                 default=self.config_entry.options.get(CONF_CACHE_ENABLED, self.config_entry.data.get(CONF_CACHE_ENABLED, True))
