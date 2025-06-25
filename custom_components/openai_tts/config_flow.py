@@ -393,18 +393,7 @@ class OpenAITTSOptionsFlow(OptionsFlow):
             _LOGGER = logging.getLogger(__name__)
             _LOGGER.debug("OpenAI TTS options schema dict: %r", schema_dict)
         return vol.Schema(schema_dict)
-            ): selector({
-                "select": {
-                    "options": chime_options
-                }
-            }),
 
-            vol.Optional(
-                CONF_MODEL,
-                default=self.config_entry.options.get(CONF_MODEL, self.config_entry.data.get(CONF_MODEL, models[0] if models else ""))
-            ): selector({
-                "select": {
-                    "options": models,
                     "mode": "dropdown",
                     "sort": True,
                     "custom_value": True
