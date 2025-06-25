@@ -35,7 +35,11 @@ from .const import (
     CONF_CHIME_SOUND,
     CONF_NORMALIZE_AUDIO,
     CONF_INSTRUCTIONS,
+    # Add new constants for cache
+    CONF_CACHE_ENABLED,
 )
+import os
+import shutil
 
 # Helper to fetch models from a remote OpenAI-compatible endpoint
 async def fetch_models(session, api_key: str, url: str) -> list[str]:
@@ -139,18 +143,37 @@ class OpenAITTSConfigFlow(ConfigFlow, domain=DOMAIN):
         Step 1: Ask for base URL and API key (optional).
         """
         errors = {}
+        description = (
+            "<b>Base URL Examples:</b><br>"
+            "<ul>"
+            "<li><b>OpenAI:</b> https://api.openai.com/v1/audio/speech</li>"
+            "<li><b>Local Kokoro:</b> http://localhost:8880/v1/audio/speech</li>"
+            "</ul>"
+            "<b>Endpoints Used:</b><br>"
+            "<ul>"
+            "<li><code>/v1/models</code> — fetch available models</li>"
+            "<li><code>/v1/audio/voices</code> — fetch available voices</li>"
+            "<li><code>/v1/audio/speech</code> — generate speech</li>"
+            "</ul>"
+            "<b>Instructions:</b> Enter the full base URL ending with <code>/v1/audio/speech</code>. The integration will automatically use the correct endpoints for each function."
+        )
         if user_input is not None:
             self._data[CONF_API_KEY] = user_input.get(CONF_API_KEY, "")
             self._data[CONF_URL] = user_input[CONF_URL].rstrip("/")
             return await self.async_step_model()
         schema = vol.Schema({
             vol.Optional(CONF_API_KEY, default=""): str,
-            vol.Required(CONF_URL, default="http://localhost:8880"): str
+            vol.Required(
+                CONF_URL,
+                default="http://localhost:8880/v1/audio/speech"
+            ): str
         })
         return self.async_show_form(
             step_id="user",
             data_schema=schema,
-            errors=errors
+            errors=errors,
+            description_placeholders={},
+            description=description
         )
 
     async def async_step_model(self, user_input: dict[str, Any] | None = None):
@@ -234,6 +257,14 @@ class OpenAITTSConfigFlow(ConfigFlow, domain=DOMAIN):
 class OpenAITTSOptionsFlow(OptionsFlow):
     """Handle options flow for OpenAI TTS."""
     async def async_step_init(self, user_input: dict | None = None):
+        # Handle purge action
+        if user_input is not None and user_input.get("purge_cache"):
+            await self._purge_tts_cache()
+            return self.async_show_form(
+                step_id="init",
+                data_schema=self._get_options_schema(),
+                description_placeholders={"info": "TTS cache purged successfully."}
+            )
         if user_input is not None:
             # Ensure all returned values are strings where appropriate
             user_input[CONF_MODEL] = str(user_input.get(CONF_MODEL, ""))
@@ -241,29 +272,52 @@ class OpenAITTSOptionsFlow(OptionsFlow):
             # Always save instructions as a string, default to empty string
             user_input[CONF_INSTRUCTIONS] = str(user_input.get(CONF_INSTRUCTIONS, ""))
             return self.async_create_entry(title="", data=user_input)
-        # Retrieve chime options using the executor to avoid blocking the event loop.
-        chime_options = await self.hass.async_add_executor_job(get_chime_options)
+        return self.async_show_form(
+            step_id="init",
+            data_schema=self._get_options_schema(),
+            description_placeholders={}
+        )
 
+    async def _purge_tts_cache(self):
+        # Attempt to delete all files in the Home Assistant TTS cache directory
+        tts_cache_path = os.path.join(self.hass.config.path("tts"))
+        if os.path.exists(tts_cache_path):
+            for filename in os.listdir(tts_cache_path):
+                file_path = os.path.join(tts_cache_path, filename)
+                try:
+                    if os.path.isfile(file_path) or os.path.islink(file_path):
+                        os.unlink(file_path)
+                    elif os.path.isdir(file_path):
+                        shutil.rmtree(file_path)
+                except Exception as e:
+                    _LOGGER.error(f"Failed to delete {file_path}: {e}")
+
+    def _get_options_schema(self):
+        # Retrieve chime options using the executor to avoid blocking the event loop.
+        import asyncio
+        chime_options = asyncio.run(self.hass.async_add_executor_job(get_chime_options))
         # Fetch dynamic models and voices from the server
         api_key = self.config_entry.data.get(CONF_API_KEY, "")
         url = self.config_entry.data.get(CONF_URL, "http://localhost:8880/v1/audio/speech")
-        # Derive base_url for polling
         if url.endswith("/v1/audio/speech"):
             base_url = url.rsplit("/v1/audio/speech", 1)[0]
         else:
             base_url = url.rstrip("/")
         session = async_get_clientsession(self.hass)
-        models = await fetch_models(session, api_key, f"{base_url}/v1/audio/speech")
-        voices = await fetch_voices(session, api_key, f"{base_url}/v1/audio/speech")
-
-        # Ensure the voice selector default is present in the dynamic list, or fallback to the first
+        models = asyncio.run(fetch_models(session, api_key, f"{base_url}/v1/audio/speech"))
+        voices = asyncio.run(fetch_voices(session, api_key, f"{base_url}/v1/audio/speech"))
         current_voice = self.config_entry.options.get(CONF_VOICE, self.config_entry.data.get(CONF_VOICE, ""))
         if current_voice not in voices and voices:
             current_voice = voices[0]
-        # Always default instructions to empty string
         current_instructions = self.config_entry.options.get(CONF_INSTRUCTIONS, self.config_entry.data.get(CONF_INSTRUCTIONS, "")) or ""
+        return vol.Schema({
+            vol.Optional(
+                CONF_CACHE_ENABLED,
+                default=self.config_entry.options.get(CONF_CACHE_ENABLED, self.config_entry.data.get(CONF_CACHE_ENABLED, True))
+            ): selector({"boolean": {}}),
 
-        options_schema = vol.Schema({
+            vol.Optional("purge_cache"): selector({"button": {"text": "Purge All TTS Cache"}}),
+
             vol.Optional(
                 CONF_CHIME_ENABLE,
                 default=self.config_entry.options.get(CONF_CHIME_ENABLE, self.config_entry.data.get(CONF_CHIME_ENABLE, False))
