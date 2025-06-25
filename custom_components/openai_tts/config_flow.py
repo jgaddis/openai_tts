@@ -390,8 +390,8 @@ class OpenAITTSOptionsFlow(OptionsFlow):
             ): selector({"boolean": {}})
         }
         import logging
-            _LOGGER = logging.getLogger(__name__)
-            _LOGGER.debug("OpenAI TTS options schema dict: %r", schema_dict)
+        _LOGGER = logging.getLogger(__name__)
+        _LOGGER.debug("OpenAI TTS options schema dict: %r", schema_dict)
         return vol.Schema(schema_dict)
 
                     "mode": "dropdown",
