@@ -393,21 +393,6 @@ class OpenAITTSOptionsFlow(OptionsFlow):
         _LOGGER = logging.getLogger(__name__)
         _LOGGER.debug("OpenAI TTS options schema dict: %r", schema_dict)
         return vol.Schema(schema_dict)
-
-            vol.Optional(
-                CONF_CACHE_ENABLED,
-                default=self.config_entry.options.get(CONF_CACHE_ENABLED, self.config_entry.data.get(CONF_CACHE_ENABLED, True))
-            ): selector({"boolean": {}}),
-
-
-            vol.Optional(
-                CONF_CHIME_ENABLE,
-                default=self.config_entry.options.get(CONF_CHIME_ENABLE, self.config_entry.data.get(CONF_CHIME_ENABLE, False))
-            ): selector({"boolean": {}}),
-
-            vol.Optional(
-                CONF_CHIME_SOUND,
-                default=self.config_entry.options.get(CONF_CHIME_SOUND, self.config_entry.data.get(CONF_CHIME_SOUND, "threetone.mp3"))
             ): selector({
                 "select": {
                     "options": chime_options
