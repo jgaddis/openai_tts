@@ -235,11 +235,35 @@ class OpenAITTSOptionsFlow(OptionsFlow):
     """Handle options flow for OpenAI TTS."""
     async def async_step_init(self, user_input: dict | None = None):
         if user_input is not None:
+            # Ensure all returned values are strings where appropriate
+            user_input[CONF_MODEL] = str(user_input.get(CONF_MODEL, ""))
+            user_input[CONF_VOICE] = str(user_input.get(CONF_VOICE, ""))
+            # Always save instructions as a string, default to empty string
+            user_input[CONF_INSTRUCTIONS] = str(user_input.get(CONF_INSTRUCTIONS, ""))
             return self.async_create_entry(title="", data=user_input)
         # Retrieve chime options using the executor to avoid blocking the event loop.
         chime_options = await self.hass.async_add_executor_job(get_chime_options)
+
+        # Fetch dynamic models and voices from the server
+        api_key = self.config_entry.data.get(CONF_API_KEY, "")
+        url = self.config_entry.data.get(CONF_URL, "http://localhost:8880/v1/audio/speech")
+        # Derive base_url for polling
+        if url.endswith("/v1/audio/speech"):
+            base_url = url.rsplit("/v1/audio/speech", 1)[0]
+        else:
+            base_url = url.rstrip("/")
+        session = async_get_clientsession(self.hass)
+        models = await fetch_models(session, api_key, f"{base_url}/v1/audio/speech")
+        voices = await fetch_voices(session, api_key, f"{base_url}/v1/audio/speech")
+
+        # Ensure the voice selector default is present in the dynamic list, or fallback to the first
+        current_voice = self.config_entry.options.get(CONF_VOICE, self.config_entry.data.get(CONF_VOICE, ""))
+        if current_voice not in voices and voices:
+            current_voice = voices[0]
+        # Always default instructions to empty string
+        current_instructions = self.config_entry.options.get(CONF_INSTRUCTIONS, self.config_entry.data.get(CONF_INSTRUCTIONS, "")) or ""
+
         options_schema = vol.Schema({
-            # Use constant for chime enable toggle so the label comes from strings.json
             vol.Optional(
                 CONF_CHIME_ENABLE,
                 default=self.config_entry.options.get(CONF_CHIME_ENABLE, self.config_entry.data.get(CONF_CHIME_ENABLE, False))
@@ -251,6 +275,18 @@ class OpenAITTSOptionsFlow(OptionsFlow):
             ): selector({
                 "select": {
                     "options": chime_options
+                }
+            }),
+
+            vol.Optional(
+                CONF_MODEL,
+                default=self.config_entry.options.get(CONF_MODEL, self.config_entry.data.get(CONF_MODEL, models[0] if models else ""))
+            ): selector({
+                "select": {
+                    "options": models,
+                    "mode": "dropdown",
+                    "sort": True,
+                    "custom_value": True
                 }
             }),
 
@@ -268,28 +304,27 @@ class OpenAITTSOptionsFlow(OptionsFlow):
 
             vol.Optional(
                 CONF_VOICE,
-                default=self.config_entry.options.get(CONF_VOICE, self.config_entry.data.get(CONF_VOICE, "shimmer"))
+                default=current_voice
             ): selector({
                 "select": {
-                    "options": VOICES,
+                    "options": voices,
                     "mode": "dropdown",
                     "sort": True,
                     "custom_value": True
                 }
             }),
 
-
             vol.Optional(
                  CONF_INSTRUCTIONS,
-                 default=self.config_entry.options.get(CONF_INSTRUCTIONS, self.config_entry.data.get(CONF_INSTRUCTIONS, None))
+                 default=current_instructions
             ): TextSelector(
                 TextSelectorConfig(type=TextSelectorType.TEXT,multiline=True)
             ),
 
-            # Normalization toggle using its constant; label will be picked from strings.json.
             vol.Optional(
                 CONF_NORMALIZE_AUDIO,
                 default=self.config_entry.options.get(CONF_NORMALIZE_AUDIO, self.config_entry.data.get(CONF_NORMALIZE_AUDIO, False))
             ): selector({"boolean": {}})
         })
         return self.async_show_form(step_id="init", data_schema=options_schema)
+
