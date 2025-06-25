@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Add text-to-speech engine",
-        "description": "<b>Base URL Examples:</b><br>\n<ul>\n<li><b>OpenAI:</b> https://api.openai.com/v1/audio/speech</li>\n<li><b>Local Kokoro:</b> http://localhost:8880/v1/audio/speech</li>\n</ul>\n<b>Endpoints Used:</b><br>\n<ul>\n<li><code>/v1/models</code> — fetch available models</li>\n<li><code>/v1/audio/voices</code> — fetch available voices</li>\n<li><code>/v1/audio/speech</code> — generate speech</li>\n</ul>\n<b>Instructions:</b> Enter the full base URL ending with <code>/v1/audio/speech</code>. The integration will automatically use the correct endpoints for each function."
+        "description": "<b>Base URL Example:</b> <code>https://api.openai.com</code><br>\nYou may also use a local Kokoro server (e.g., <code>http://localhost:8880</code>).<br>\n<b>Endpoints Used:</b> The integration will automatically use <code>/v1/models</code>, <code>/v1/audio/voices</code>, and <code>/v1/audio/speech</code> as needed. <b>Do not include these in the base URL.</b>"
         "data": {
           "api_key": "Enter OpenAI API key",
           "speed": "Speed (0.25 to 4.0, where 1.0 is default)",

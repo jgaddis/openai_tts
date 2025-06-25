@@ -165,7 +165,7 @@ class OpenAITTSConfigFlow(ConfigFlow, domain=DOMAIN):
             vol.Optional(CONF_API_KEY, default=""): str,
             vol.Required(
                 CONF_URL,
-                default="http://localhost:8880/v1/audio/speech"
+                default="https://api.openai.com"
             ): str
         })
         return self.async_show_form(
@@ -181,8 +181,13 @@ class OpenAITTSConfigFlow(ConfigFlow, domain=DOMAIN):
         """
         errors = {}
         session = async_get_clientsession(self.hass)
-        base_url = self._data[CONF_URL]
+        configured_url = self._data[CONF_URL]
         api_key = self._data.get(CONF_API_KEY, "")
+        # Always strip /v1/audio/speech if present
+        if configured_url.endswith("/v1/audio/speech"):
+            base_url = configured_url.rsplit("/v1/audio/speech", 1)[0]
+        else:
+            base_url = configured_url.rstrip("/")
         models = await fetch_models(session, api_key, f"{base_url}/v1/audio/speech")
         if user_input is not None:
             self._data[CONF_MODEL] = user_input[CONF_MODEL]
@@ -209,8 +214,13 @@ class OpenAITTSConfigFlow(ConfigFlow, domain=DOMAIN):
         """
         errors = {}
         session = async_get_clientsession(self.hass)
-        base_url = self._data[CONF_URL]
+        configured_url = self._data[CONF_URL]
         api_key = self._data.get(CONF_API_KEY, "")
+        # Always strip /v1/audio/speech if present
+        if configured_url.endswith("/v1/audio/speech"):
+            base_url = configured_url.rsplit("/v1/audio/speech", 1)[0]
+        else:
+            base_url = configured_url.rstrip("/")
         voices = await fetch_voices(session, api_key, f"{base_url}/v1/audio/speech")
         if user_input is not None:
             self._data[CONF_VOICE] = user_input[CONF_VOICE]
@@ -298,6 +308,7 @@ class OpenAITTSOptionsFlow(OptionsFlow):
         # Fetch dynamic models and voices from the server
         api_key = self.config_entry.data.get(CONF_API_KEY, "")
         url = self.config_entry.data.get(CONF_URL, "http://localhost:8880/v1/audio/speech")
+        # Always strip /v1/audio/speech if present
         if url.endswith("/v1/audio/speech"):
             base_url = url.rsplit("/v1/audio/speech", 1)[0]
         else:
@@ -315,7 +326,6 @@ class OpenAITTSOptionsFlow(OptionsFlow):
                 default=self.config_entry.options.get(CONF_CACHE_ENABLED, self.config_entry.data.get(CONF_CACHE_ENABLED, True))
             ): selector({"boolean": {}}),
 
-            vol.Optional("purge_cache"): selector({"button": {"text": "Purge All TTS Cache"}}),
 
             vol.Optional(
                 CONF_CHIME_ENABLE,
