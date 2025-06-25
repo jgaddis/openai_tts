@@ -388,5 +388,5 @@ class OpenAITTSOptionsFlow(OptionsFlow):
                 default=self.config_entry.options.get(CONF_NORMALIZE_AUDIO, self.config_entry.data.get(CONF_NORMALIZE_AUDIO, False))
             ): selector({"boolean": {}})
         })
-        return self.async_show_form(step_id="init", data_schema=options_schema)
+        return self.async_show_form(step_id="init", data_schema=await self._get_options_schema())
 
