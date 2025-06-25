@@ -172,8 +172,7 @@ class OpenAITTSConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=schema,
             errors=errors,
-            description_placeholders={},
-            description=description
+            description_placeholders={}
         )
 
     async def async_step_model(self, user_input: dict[str, Any] | None = None):
