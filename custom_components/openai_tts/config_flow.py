@@ -266,44 +266,6 @@ class OpenAITTSConfigFlow(ConfigFlow, domain=DOMAIN):
 class OpenAITTSOptionsFlow(OptionsFlow):
     """Handle options flow for OpenAI TTS."""
     async def async_step_init(self, user_input: dict | None = None):
-        # Handle purge action
-        if user_input is not None and user_input.get("purge_cache"):
-            await self._purge_tts_cache()
-            return self.async_show_form(
-                step_id="init",
-                data_schema=self._get_options_schema(),
-                description_placeholders={"info": "TTS cache purged successfully."}
-            )
-        if user_input is not None:
-            # Ensure all returned values are strings where appropriate
-            user_input[CONF_MODEL] = str(user_input.get(CONF_MODEL, ""))
-            user_input[CONF_VOICE] = str(user_input.get(CONF_VOICE, ""))
-            # Always save instructions as a string, default to empty string
-            user_input[CONF_INSTRUCTIONS] = str(user_input.get(CONF_INSTRUCTIONS, ""))
-            return self.async_create_entry(title="", data=user_input)
-        return self.async_show_form(
-            step_id="init",
-            data_schema=self._get_options_schema(),
-            description_placeholders={}
-        )
-
-    async def _purge_tts_cache(self):
-        # Attempt to delete all files in the Home Assistant TTS cache directory
-        tts_cache_path = os.path.join(self.hass.config.path("tts"))
-        if os.path.exists(tts_cache_path):
-            for filename in os.listdir(tts_cache_path):
-                file_path = os.path.join(tts_cache_path, filename)
-                try:
-                    if os.path.isfile(file_path) or os.path.islink(file_path):
-                        os.unlink(file_path)
-                    elif os.path.isdir(file_path):
-                        shutil.rmtree(file_path)
-                except Exception as e:
-                    _LOGGER.error(f"Failed to delete {file_path}: {e}")
-
-    async def _get_options_schema(self):
-        """Build the options schema dynamically."""
-        # Fetch dynamic models and voices from the server
         api_key = self.config_entry.data.get(CONF_API_KEY, "")
         url = self.config_entry.data.get(CONF_URL, "http://localhost:8880/v1/audio/speech")
         # Always strip /v1/audio/speech if present
@@ -326,6 +288,46 @@ class OpenAITTSOptionsFlow(OptionsFlow):
         if current_voice not in voices and voices:
             current_voice = voices[0]
         current_instructions = self.config_entry.options.get(CONF_INSTRUCTIONS, self.config_entry.data.get(CONF_INSTRUCTIONS, "")) or ""
+
+        # Handle purge action
+        if user_input is not None and user_input.get("purge_cache"):
+            await self._purge_tts_cache()
+            schema = self._get_options_schema(models, voices, chime_options, current_voice, current_instructions)
+            return self.async_show_form(
+                step_id="init",
+                data_schema=schema,
+                description_placeholders={"info": "TTS cache purged successfully."}
+            )
+        if user_input is not None:
+            # Ensure all returned values are strings where appropriate
+            user_input[CONF_MODEL] = str(user_input.get(CONF_MODEL, ""))
+            user_input[CONF_VOICE] = str(user_input.get(CONF_VOICE, ""))
+            # Always save instructions as a string, default to empty string
+            user_input[CONF_INSTRUCTIONS] = str(user_input.get(CONF_INSTRUCTIONS, ""))
+            return self.async_create_entry(title="", data=user_input)
+        schema = self._get_options_schema(models, voices, chime_options, current_voice, current_instructions)
+        return self.async_show_form(
+            step_id="init",
+            data_schema=schema,
+            description_placeholders={}
+        )
+
+
+    async def _purge_tts_cache(self):
+        # Attempt to delete all files in the Home Assistant TTS cache directory
+        tts_cache_path = os.path.join(self.hass.config.path("tts"))
+        if os.path.exists(tts_cache_path):
+            for filename in os.listdir(tts_cache_path):
+                file_path = os.path.join(tts_cache_path, filename)
+                try:
+                    if os.path.isfile(file_path) or os.path.islink(file_path):
+                        os.unlink(file_path)
+                    elif os.path.isdir(file_path):
+                        shutil.rmtree(file_path)
+                except Exception as e:
+                    _LOGGER.error(f"Failed to delete {file_path}: {e}")
+
+    def _get_options_schema(self, models, voices, chime_options, current_voice, current_instructions):
         schema_dict = {
             vol.Optional(
                 CONF_CACHE_ENABLED,
@@ -393,3 +395,4 @@ class OpenAITTSOptionsFlow(OptionsFlow):
         _LOGGER = logging.getLogger(__name__)
         _LOGGER.debug("OpenAI TTS options schema dict: %r", schema_dict)
         return vol.Schema(schema_dict)
+
